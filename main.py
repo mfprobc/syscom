@@ -1,15 +1,10 @@
 import requests
+import csv
+import io
 import re
+import json
 
-# --------- CONFIGURACIÓN ---------
-# SYSCOM - Autenticación y endpoints
-SYSCOM_TOKEN_URL = "https://developers.syscom.mx/api/v1/token"
-SYSCOM_PRODUCTOS_URL = "https://developers.syscom.mx/api/v1/productos"
-
-CLIENT_ID = "pPKGzLKN5JZx7035pzGikbYycC5uD4JR"
-CLIENT_SECRET = "pImuEy4l9M6CNroyoW2wip4CywDmG9xYSTehFpri"
-
-# SHOPIFY - Datos de tu tienda
+# Configuración Shopify
 SHOPIFY_DOMAIN = "mfprobc.shopify.com"
 ACCESS_TOKEN = "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"
 
@@ -18,7 +13,8 @@ HEADERS_SHOPIFY = {
     "Content-Type": "application/json"
 }
 
-# --------- FUNCIONES ---------
+# URL CSV de SYSCOM (actualizado cada hora)
+CSV_URL = "http://betaweb.syscom.mx/principal/reporte_art_hora?cadena1=104562864&cadena2=f54cfb7feb4f6c7319c08719d7455714&all=1&format=shopify&format_shopify=stock&tipo_precio=precio_sin_dfi&moneda=usd&incremento=0&sel=22,37,30,26,32,38"
 
 def limpiar_texto(texto, max_length=None):
     if not texto:
@@ -37,16 +33,6 @@ def log(mensaje):
     with open("log.txt", "a", encoding="utf-8") as f:
         f.write(mensaje + "\n")
 
-def get_syscom_access_token():
-    payload = {
-        "grant_type": "client_credentials",
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET
-    }
-    response = requests.post(SYSCOM_TOKEN_URL, data=payload)
-    response.raise_for_status()
-    return response.json()["access_token"]
-
 def get_product_by_handle(handle):
     url = f"https://{SHOPIFY_DOMAIN}/admin/api/2023-07/products.json?handle={handle}"
     resp = requests.get(url, headers=HEADERS_SHOPIFY)
@@ -57,7 +43,7 @@ def get_product_by_handle(handle):
         log(f"❌ Error al buscar {handle}: {resp.status_code}")
         return None
 
-def update_variant_price_and_stock(product, price, stock):
+def update_variant(product, price, stock):
     variant_id = product["variants"][0]["id"]
     url = f"https://{SHOPIFY_DOMAIN}/admin/api/2023-07/variants/{variant_id}.json"
     payload = {
@@ -75,7 +61,7 @@ def update_variant_price_and_stock(product, price, stock):
         log(f"❌ Error actualizando {product['title']}: {resp.status_code}")
         log(resp.text)
 
-def crear_producto_en_shopify(handle, title, body, price, stock):
+def crear_producto(handle, title, body, price, stock):
     url = f"https://{SHOPIFY_DOMAIN}/admin/api/2023-07/products.json"
     payload = {
         "product": {
@@ -91,54 +77,32 @@ def crear_producto_en_shopify(handle, title, body, price, stock):
             ]
         }
     }
-    response = requests.post(url, headers=HEADERS_SHOPIFY, json=payload)
-    if response.status_code == 201:
+    resp = requests.post(url, headers=HEADERS_SHOPIFY, json=payload)
+    if resp.status_code == 201:
         log(f"🆕 Producto creado: {title} → ${price} / stock: {stock}")
     else:
-        log(f"❌ Error al crear producto {handle}: {response.status_code}")
-        log(response.text)
+        log(f"❌ Error al crear producto {handle}: {resp.status_code}")
+        log(resp.text)
 
-# --------- FLUJO PRINCIPAL ---------
+# ------------------ FLUJO PRINCIPAL ------------------
 
-log("\n🟡 SINCRONIZACIÓN INICIADA")
-
-try:
-    log("🔐 Obteniendo token de SYSCOM...")
-    access_token = get_syscom_access_token()
-except Exception as e:
-    log(f"❌ Error al obtener token SYSCOM: {e}")
-    exit()
+log("🟡 INICIANDO SINCRONIZACIÓN")
 
 try:
-    log("📦 Consultando productos desde SYSCOM...")
-    headers_syscom = {"Authorization": f"Bearer {access_token}"}
-    response = requests.get(SYSCOM_PRODUCTOS_URL, headers=headers_syscom)
-    response.raise_for_status()
-    productos = response.json().get("data", [])
+    log("📥 Descargando archivo CSV...")
+    r = requests.get(CSV_URL)
+    r.raise_for_status()
+    csv_text = r.content.decode("latin-1")
 except Exception as e:
-    log(f"❌ Error al consultar productos SYSCOM: {e}")
+    log(f"❌ Error al descargar CSV: {e}")
     exit()
 
-log(f"🔄 Procesando {len(productos)} productos...\n")
+reader = csv.DictReader(io.StringIO(csv_text))
+productos = list(reader)
+log(f"📦 Productos leídos: {len(productos)}")
 
 for p in productos:
-    handle = limpiar_texto(p.get("codigo"), max_length=255)
-    title = limpiar_texto(p.get("descripcion"), max_length=255)
-    body = limpiar_texto(p.get("descripcion"), max_length=3000)
-    price = p.get("precio")
-    stock = p.get("disponible")
-
-    if not handle or not price:
-        continue
-
-    try:
-        product = get_product_by_handle(handle)
-        if product:
-            update_variant_price_and_stock(product, price, stock)
-        else:
-            crear_producto_en_shopify(handle, title, body, price, stock)
-    except Exception as e:
-        log(f"❌ Error procesando {handle}: {e}")
-
-log("✅ SINCRONIZACIÓN COMPLETADA")
+    handle = limpiar_texto(p.get("Codigo"), 255)
+    title = limpiar_texto(p.get("Descripcion"), 255)
+    body = limpiar
 
