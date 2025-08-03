@@ -28,8 +28,11 @@ def get_syscom_products(token):
     headers = {"Authorization": f"Bearer {token}"}
     while True:
         params = {"limit": 50, "page": page}
-        r = requests.get("https://developers.syscom.mx/api/v1/productos",
-                         headers=headers, params=params)
+        r = requests.get("https://developers.syscom.mx/api/v1/productos", headers=headers, params=params)
+        if r.status_code == 422:
+            print("🚨 Error 422 recibido:")
+            print(r.text)  # ← Imprime el cuerpo del error
+            raise Exception("⛔ Petición inválida a Syscom: revisar permisos o parámetros")
         if r.status_code == 401:
             raise Exception("⛔ Token Syscom inválido o expirado")
         r.raise_for_status()
