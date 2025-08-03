@@ -1,39 +1,38 @@
 import requests
-import os
-import base64
-from dotenv import load_dotenv
 
-load_dotenv()
+# === CONFIGURACIÓN MANUAL ===
+SYSCOM_CLIENT_ID = "TU_CLIENT_ID"
+SYSCOM_CLIENT_SECRET = "TU_CLIENT_SECRET"
+SHOPIFY_DOMAIN = "gjgn71-z3.myshopify.com"
+SHOPIFY_TOKEN = "shpat_..."
 
-# === Configuración desde .env ===
-SYSCOM_API_KEY = os.getenv("SYSCOM_API_KEY")
-SYSCOM_API_SECRET = os.getenv("SYSCOM_API_SECRET")
-SHOPIFY_DOMAIN = os.getenv("SHOPIFY_DOMAIN")
-SHOPIFY_TOKEN = os.getenv("SHOPIFY_TOKEN")
+# === Obtener token Syscom (OAuth2) ===
+def get_syscom_token():
+    url = "https://developers.syscom.mx/oauth/token"
+    data = {
+        "client_id": SYSCOM_CLIENT_ID,
+        "client_secret": SYSCOM_CLIENT_SECRET,
+        "grant_type": "client_credentials"
+    }
+    r = requests.post(url, data=data)
+    r.raise_for_status()
+    return r.json()["access_token"]
 
-# === Autenticación básica para Syscom ===
-def syscom_auth_header():
-    token = f"{SYSCOM_API_KEY}:{SYSCOM_API_SECRET}"
-    b64 = base64.b64encode(token.encode()).decode()
-    return {"Authorization": f"Basic {b64}"}
-
-# === Obtener productos desde SYSCOM ===
-def get_syscom_products():
-    url = "https://developers.syscom.mx/api/v1/productos"
-    headers = syscom_auth_header()
+# === Obtener productos desde Syscom ===
+def get_syscom_products(token):
     productos = []
     page = 1
-
+    headers = {"Authorization": f"Bearer {token}"}
     while True:
         params = {"limit": 50, "page": page}
-        r = requests.get(url, headers=headers, params=params)
+        r = requests.get("https://developers.syscom.mx/api/v1/productos",
+                         headers=headers, params=params)
         r.raise_for_status()
         data = r.json().get("data", [])
         if not data:
             break
         productos.extend(data)
         page += 1
-
     return productos
 
 # === Buscar producto por SKU en Shopify ===
@@ -46,18 +45,13 @@ def shopify_get_product_by_sku(sku):
 
 # === Crear o actualizar producto en Shopify ===
 def shopify_create_or_update(producto):
-    headers = {
-        "X-Shopify-Access-Token": SHOPIFY_TOKEN,
-        "Content-Type": "application/json"
-    }
-
     sku = producto.get("codigo")
     precio = producto.get("precio", 0)
     nombre = producto.get("nombre", sku)
     stock = producto.get("stock", 0)
     imagen = producto.get("imagen")
 
-    shopify_product = {
+    payload = {
         "product": {
             "title": nombre,
             "body_html": producto.get("descripcion", ""),
@@ -74,25 +68,31 @@ def shopify_create_or_update(producto):
     }
 
     existing = shopify_get_product_by_sku(sku)
+    headers = {
+        "X-Shopify-Access-Token": SHOPIFY_TOKEN,
+        "Content-Type": "application/json"
+    }
+
     if existing:
-        product_id = existing[0]["id"]
-        url = f"https://{SHOPIFY_DOMAIN}/admin/api/2024-01/products/{product_id}.json"
-        r = requests.put(url, headers=headers, json=shopify_product)
+        pid = existing[0]["id"]
+        url = f"https://{SHOPIFY_DOMAIN}/admin/api/2024-01/products/{pid}.json"
+        r = requests.put(url, headers=headers, json=payload)
         print(f"🔁 Actualizado: {sku}")
     else:
         url = f"https://{SHOPIFY_DOMAIN}/admin/api/2024-01/products.json"
-        r = requests.post(url, headers=headers, json=shopify_product)
+        r = requests.post(url, headers=headers, json=payload)
         print(f"✅ Creado: {sku}")
 
-    if r.status_code not in [200, 201]:
-        print(f"⚠️ Error con {sku}: {r.status_code} - {r.text}")
+    if r.status_code not in (200, 201):
+        print(f"⚠️ Error con {sku}: {r.status_code} {r.text}")
 
 # === MAIN ===
 def main():
     try:
-        print("🔄 Iniciando sincronización...")
-        productos = get_syscom_products()
-        print(f"📦 Productos recuperados: {len(productos)}")
+        print("🔄 Solicitando token Syscom...")
+        token = get_syscom_token()
+        productos = get_syscom_products(token)
+        print(f"📦 {len(productos)} productos obtenidos de Syscom")
         for p in productos:
             shopify_create_or_update(p)
         print("✅ Sincronización finalizada.")
