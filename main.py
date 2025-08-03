@@ -96,13 +96,15 @@ def main():
         for marca in marcas:
             for categoria in categorias_filtradas:
                 try:
+                    print(f"🔍 Proceso Marca: {marca['nombre']} (ID {marca['id']}) + Categoría: {categoria['nombre']} (ID {categoria['id']})")
                     prods = get_products(token, marca["id"], categoria["id"])
+                    print(f"🔎 Resultado: {len(prods)} productos")
                     if prods:
-                        print(f"📦 {len(prods)} productos - Marca: {marca['nombre']}, Categoría: {categoria['nombre']}")
                         for p in prods:
                             shopify_create_or_update(p)
                             total += 1
                 except Exception as e:
+                    print(f"⚠️ Error en combinación Marca {marca['nombre']} + Categoría {categoria['nombre']}: {str(e)}")
                     continue
         print(f"✅ Total sincronizados: {total}")
     except Exception as e:
