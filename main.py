@@ -4,7 +4,7 @@ import io
 
 # --------- CONFIGURACIÓN ---------
 # SYSCOM - URL del CSV
-SYSCOM_CSV_URL = "https://betaweb.syscom.mx/principal/reporte_art_hora?cadena1=104562864&cadena2=f54cfb7feb4f6c7319c08719d7455714&all=1&format=shopify&format_shopify=stock&tipo_precio=precio_sin_dfi&moneda=usd&incremento=0&sel=22,37,30,26,32,38"
+SYSCOM_CSV_URL = "http://betaweb.syscom.mx/principal/reporte_art_hora?cadena1=104562864&cadena2=f54cfb7feb4f6c7319c08719d7455714&all=1&format=shopify&format_shopify=stock&tipo_precio=precio_sin_dfi&moneda=usd&incremento=0&sel=22,37,30,26,32,38"
 
 # SHOPIFY - Datos de tu tienda
 SHOPIFY_DOMAIN = "mfprobc.shopify.com"
